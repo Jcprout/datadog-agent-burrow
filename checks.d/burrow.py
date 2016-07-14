@@ -31,6 +31,7 @@ class BurrowCheck(AgentCheck):
 
         self._topic_offsets(clusters, burrow_address, extra_tags)
         self._consumer_groups_offsets(clusters, burrow_address, extra_tags)
+        self._consumer_groups_lags(clusters, burrow_address, extra_tags)
 
     def _check_burrow(self, burrow_address, extra_tags):
         """
@@ -84,6 +85,33 @@ class BurrowCheck(AgentCheck):
                     tags = ["topic:%s" % topic, "cluster:%s" % cluster,
                             "consumer:%s" % consumer] + extra_tags
                     self._submit_offsets_from_json(offsets_type="consumer", json=response, tags=tags)
+
+    def _consumer_groups_lags(self, clusters, burrow_address, extra_tags):
+        """
+        Retrieve the offsets for all consumer groups in the clusters
+        Getting Consumer list could be factored out
+        """
+        for cluster in clusters:
+            consumers_path = "%s/%s/consumer" % (CLUSTER_ENDPOINT, cluster)
+            consumers_list = self._rest_request_to_json(burrow_address, consumers_path).get("consumers")
+            for consumer in consumers_list:
+                lags_path = "%s/%s/lag" % (consumers_path, consumer)
+                lag_json = self._rest_request_to_json(burrow_address, lags_path)
+                partitions_list = lag_json.get("status").get("partitions")
+                max_lag = lag_json.get("status").get("maxlag")
+                total_lag = lag_json.get("status").get("totallag")
+                consumer_tags = ["cluster:%s" % cluster, "consumer:%s" % consumer] + extra_tags
+                self.gauge("kafka.consumer.maxlag", max_lag, tags=consumer_tags)
+                self.gauge("kafka.consumer.totallag", total_lag, tags=consumer_tags)
+                self._submit_partition_lags(self, partitions_list, consumer_tags)
+
+    def _submit_partition_lags(self, partitions_list, tags):
+        for partition in partitions_list:
+            topic = partition.get("topic")
+            partition_number = partition.get("partition")
+            lag = partition.get("end").get("lag")
+            new_tags = tags + ["topic:%s" % topic, "partition:%s" % partition_number]
+            self.gauge("kafka.consumer.lag", lag, tags=new_tags)
 
     def _submit_offsets_from_json(self, offsets_type, json, tags):
         """
