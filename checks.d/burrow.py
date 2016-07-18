@@ -103,7 +103,7 @@ class BurrowCheck(AgentCheck):
                 consumer_tags = ["cluster:%s" % cluster, "consumer:%s" % consumer] + extra_tags
                 self.gauge("kafka.consumer.maxlag", max_lag, tags=consumer_tags)
                 self.gauge("kafka.consumer.totallag", total_lag, tags=consumer_tags)
-                self._submit_partition_lags(self, partitions_list, consumer_tags)
+                self._submit_partition_lags(partitions_list=partitions_list, tags=consumer_tags)
 
     def _submit_partition_lags(self, partitions_list, tags):
         for partition in partitions_list:
